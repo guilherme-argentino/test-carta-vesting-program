@@ -33,7 +33,7 @@ import com.carta.vesting.application.data.VestingResponse;
 import com.carta.vesting.application.util.CommandLineUtils;
 import com.carta.vesting.application.util.WriteableResourceAdapter;
 import com.carta.vesting.domain.service.EmployeeService;
-import com.carta.vesting.infrastructure.batch.AwardEmplyoeePeekingCompletionPolicyReader;
+import com.carta.vesting.infrastructure.batch.AwardEmployeePeekingCompletionPolicyReader;
 import com.carta.vesting.infrastructure.batch.SimpleSortFileTasklet;
 
 @Configuration
@@ -187,7 +187,7 @@ public class BatchConfiguration {
 	@Bean
 	public Step stepSummarize(ItemReader<VestingRequest> empReader, ItemWriter<VestingResponse> sysOutWriter) {
 		return stepBuilderFactory.get("step summarize") //
-				.<VestingRequest, VestingResponse>chunk(new AwardEmplyoeePeekingCompletionPolicyReader()) //
+				.<VestingRequest, VestingResponse>chunk(new AwardEmployeePeekingCompletionPolicyReader()) //
 				.reader(empReader) //
 				.processor(employeeSumarizeProcessor) //
 				.writer(sysOutWriter) //

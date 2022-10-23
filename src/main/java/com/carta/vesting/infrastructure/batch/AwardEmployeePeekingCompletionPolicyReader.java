@@ -10,7 +10,7 @@ import org.springframework.batch.repeat.policy.SimpleCompletionPolicy;
 
 import com.carta.vesting.application.data.VestingResponse;
 
-public class AwardEmplyoeePeekingCompletionPolicyReader extends SimpleCompletionPolicy
+public class AwardEmployeePeekingCompletionPolicyReader extends SimpleCompletionPolicy
 		implements ItemReader<VestingResponse> {
 
 	private PeekableItemReader<? extends VestingResponse> delegate;
