@@ -1,56 +1,42 @@
 package com.carta.vesting.application.cli;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.stereotype.Component;
 
+import com.carta.vesting.application.data.VestingRequest;
 import com.carta.vesting.application.data.VestingResponse;
-import com.carta.vesting.domain.Employee;
 
-import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
 @Component
-@AllArgsConstructor
-public class EmployeeSumarizeProcessor implements ItemProcessor<Employee, List<VestingResponse>> {
-
-	@Override
-	public List<VestingResponse> process(Employee item) throws Exception {
-		// TODO Auto-generated method stub
-		return from(item);
-	}
+@NoArgsConstructor
+public class EmployeeSumarizeProcessor implements ItemProcessor<VestingRequest, VestingResponse> {
+	
+	private VestingResponse vestingResponse = null;
 
 	/**
 	 * Método responsável pela transformação do objeto do domínio para 
 	 * saida do sistema e sumarização de <<QUANTITY>> por <<AWARD ID>>
-	 * @param employee
+	 * @param vestingRequest
 	 * @return
 	 */
-	private List<VestingResponse> from(Employee employee) {
-		return employee.getAwards().stream() //
-				.map(award -> VestingResponse.builder() //
-						.awardId(award.getId()) //
-						.awardQuantity(award.getQuantity()) //
-						.empId(employee.getId()) //
-						.empName(employee.getFullName()) //
-						.build())
-				.collect(Collectors.collectingAndThen(
-						        Collectors.groupingBy(VestingResponse::getAwardId, 
-						        		Collectors.collectingAndThen(
-										Collectors.reducing((a, b) -> sumMerge(a, b)), Optional::get)),
-						m -> new ArrayList<>(m.values())));
+	@Override
+	public VestingResponse process(VestingRequest item) throws Exception {
+		if(vestingResponse == null) {
+			vestingResponse = de(item);			
+		} else {
+			vestingResponse.setAwardQuantity(vestingResponse.getAwardQuantity() + item.getAwardQuantity());			
+		}
+		return vestingResponse;
 	}
 
-	private VestingResponse sumMerge(VestingResponse base, VestingResponse additional) {
-		// TODO Auto-generated method stub
+	private VestingResponse de(VestingRequest item) {
 		return VestingResponse.builder() //
-				.awardId(base.getAwardId()) //
-				.awardQuantity(base.getAwardQuantity() + additional.getAwardQuantity()) //
-				.empId(base.getEmpId()) //
-				.empName(base.getEmpName()) //
+				.awardId(item.getAwardId())
+				.awardQuantity(item.getAwardQuantity())
+				.empId(item.getEmployeeId())
+				.empName(item.getEmployeeName())
 				.build();
 	}
+	
 }

@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Comparator;
-import java.util.List;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -33,13 +32,10 @@ import com.carta.vesting.application.data.VestingRequest;
 import com.carta.vesting.application.data.VestingResponse;
 import com.carta.vesting.application.util.CommandLineUtils;
 import com.carta.vesting.application.util.WriteableResourceAdapter;
-import com.carta.vesting.domain.Employee;
 import com.carta.vesting.domain.service.EmployeeService;
+import com.carta.vesting.infrastructure.batch.AwardPeekingCompletionPolicyReader;
 import com.carta.vesting.infrastructure.batch.SimpleSortFileTasklet;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
 @Configuration
 @EnableBatchProcessing
 public class BatchConfiguration {
@@ -63,6 +59,13 @@ public class BatchConfiguration {
 	public File orderedSourceCsvFile() throws IOException {
 		return File.createTempFile("ordered-", ".csv");
 	}
+	
+	
+	/******************************************************/
+	/**                                                   */ 
+	/**                   Step One Deps                   */ 
+	/**                                                   */ 
+	/******************************************************/
 	
 	@Bean
 	public FlatFileItemReader<VestingRequest> csvReader() {
@@ -100,22 +103,36 @@ public class BatchConfiguration {
 	}
 	
 	@Bean
-	public SimpleSortFileTasklet<VestingRequest> tasklet(FlatFileItemReader<VestingRequest> csvReader, FlatFileItemWriter<VestingRequest> orderedSourceCsvWriter, Comparator<VestingRequest> comparator) {
-		return new SimpleSortFileTasklet<>(csvReader,  orderedSourceCsvWriter, comparator);
+	public SimpleSortFileTasklet<VestingRequest> tasklet(FlatFileItemReader<VestingRequest> csvReader,
+			FlatFileItemWriter<VestingRequest> orderedSourceCsvWriter, Comparator<VestingRequest> comparator) {
+		return new SimpleSortFileTasklet<>(csvReader, orderedSourceCsvWriter, comparator);
+	}
+
+
+	/******************************************************/
+	/**                                                   */ 
+	/**                   Step Two Deps                   */ 
+	/**                                                   */ 
+	/******************************************************/
+	
+	@Bean
+	public FlatFileItemReader<VestingRequest> empReader(File orderedSourceCsvFile) {
+		return new FlatFileItemReaderBuilder<VestingRequest>() //
+				.name("vestingItemReader") //
+				.resource(new FileSystemResource(orderedSourceCsvFile)) //
+				.delimited() //
+				.names(VestingRequest.csvFieldNames()) //
+				.fieldSetMapper(new BeanWrapperFieldSetMapper<VestingRequest>() {
+					{
+						setTargetType(VestingRequest.class);
+					}
+				}).build();
 	}
 
 	@Bean
-	public ItemWriter<Employee> empWriter() {
-		return employees -> {
-			log.info("Saving Employee Records: " + employees);
-			employeeService.addAll(employees);
-		};
-	}
-
-	@Bean
-	public ItemWriter<List<VestingResponse>> sysOutWriter() {
+	public ItemWriter<VestingResponse> sysOutWriter() {
 		// Create writer instance
-		FlatFileItemWriter<List<VestingResponse>> writer = new FlatFileItemWriter<>();
+		FlatFileItemWriter<VestingResponse> writer = new FlatFileItemWriter<>();
 
 		// All job repetitions should "append" to same output file
 		writer.setAppendAllowed(true);
@@ -130,10 +147,10 @@ public class BatchConfiguration {
 		});
 
 		// Name field values sequence based on object properties
-		writer.setLineAggregator(new DelimitedLineAggregator<List<VestingResponse>>() {
+		writer.setLineAggregator(new DelimitedLineAggregator<VestingResponse>() {
 			{
 				setDelimiter(",");
-				setFieldExtractor(new BeanWrapperFieldExtractor<List<VestingResponse>>() {
+				setFieldExtractor(new BeanWrapperFieldExtractor<VestingResponse>() {
 					{
 						setNames(VestingResponse.csvFieldNames());
 					}
@@ -142,6 +159,13 @@ public class BatchConfiguration {
 		});
 		return writer;
 	}
+	
+
+	/******************************************************/
+	/**                                                   */ 
+	/**                Steps Orchestration                */ 
+	/**                                                   */ 
+	/******************************************************/
 
 	@Bean
 	public Job importUserJob(JobCompletionNotificationListener listener, Step stepLoad, Step stepSummarize) {
@@ -161,9 +185,9 @@ public class BatchConfiguration {
 	}
 
 	@Bean
-	public Step stepSummarize(ItemReader<Employee> empReader, ItemWriter<List<VestingResponse>> sysOutWriter) {
+	public Step stepSummarize(ItemReader<VestingRequest> empReader, ItemWriter<VestingResponse> sysOutWriter) {
 		return stepBuilderFactory.get("step summarize") //
-				.<Employee, List<VestingResponse>>chunk(10) //
+				.<VestingRequest, VestingResponse>chunk(new AwardPeekingCompletionPolicyReader()) //
 				.reader(empReader) //
 				.processor(employeeSumarizeProcessor) //
 				.writer(sysOutWriter) //
